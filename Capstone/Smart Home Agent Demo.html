@@ -1,0 +1,396 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Smart Home Agent Demo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room dashboard. Inputs left, live house centre, agent reasoning right. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --fg:#14222e; --muted:#5b6b78; --line:#d9e0e6;
+  --accent:#0b6e8a; --accent-soft:#dff0f5; --ok:#1d8a4e; --warn:#b7791f; --crit:#c53030;
+  --room:#eaf0f4; --wall:#9fb1bf; --glow:#ffd75e; --code:#eef2f5;
+  --f-body:'Inter',system-ui,sans-serif; --f-head:'Space Grotesk','Inter',sans-serif; --f-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e161d; --panel:#16212b; --fg:#e6edf3; --muted:#93a4b3; --line:#27384a;
+  --accent:#4cc3e0; --accent-soft:#12303b; --ok:#4cc27f; --warn:#e3a94a; --crit:#f26b6b;
+  --room:#1b2a36; --wall:#4a6272; --glow:#ffd75e; --code:#0f1a22; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e161d; --panel:#16212b; --fg:#e6edf3; --muted:#93a4b3; --line:#27384a;
+  --accent:#4cc3e0; --accent-soft:#12303b; --ok:#4cc27f; --warn:#e3a94a; --crit:#f26b6b;
+  --room:#1b2a36; --wall:#4a6272; --glow:#ffd75e; --code:#0f1a22; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding-block:20px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1280px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+h1{font-family:var(--f-head);font-size:clamp(20px,3vw,28px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.hbtns{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 12px;border-radius:6px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:root[data-theme="dark"] button.primary{color:#04222b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) button.primary{color:#04222b}}
+button.on{background:var(--accent-soft);border-color:var(--accent)}
+.pipe{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.stage{padding:6px 10px;border:1px solid var(--line);background:var(--panel);border-radius:6px;font-size:12.5px;font-weight:500;color:var(--fg)}
+.stage.act{background:var(--accent);color:#fff;border-color:var(--accent)}
+:root[data-theme="dark"] .stage.act{color:#04222b}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .stage.act{color:#04222b}}
+.arrow{color:var(--muted)}
+.grid{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr) minmax(0,380px);gap:16px;align-items:start}
+@media (max-width:1050px){.grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.col-r{grid-column:1/-1}}
+@media (max-width:700px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.card h2{font-family:var(--f-head);font-size:14px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.stack{display:grid;gap:16px;min-width:0}
+.ctl{display:grid;gap:4px;margin-bottom:12px}
+.ctl label{display:flex;justify-content:space-between;font-weight:500}
+.ctl output{font-family:var(--f-mono);color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.tog{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-weight:500}
+.sw{position:relative;width:44px;height:24px;flex:none}
+.sw input{opacity:0;position:absolute;inset:0;margin:0;cursor:pointer;z-index:1}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:12px;transition:.15s}
+.sw span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s}
+.sw input:checked+span{background:var(--accent)}
+.sw input:checked+span::after{left:23px}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.presets{display:grid;gap:6px}
+.presets button{text-align:left}
+svg{width:100%;height:auto;display:block}
+.status{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.pill{border:1px solid var(--line);border-radius:6px;padding:8px;text-align:center}
+.pill b{display:block;font-family:var(--f-head);font-size:13px;color:var(--muted);font-weight:500}
+.pill span{font-weight:600;font-size:16px}
+.pill.on{border-color:var(--ok)} .pill.on span{color:var(--ok)}
+.pill.alarm.on{border-color:var(--crit)} .pill.alarm.on span{color:var(--crit)}
+.caption{margin-top:10px;padding:10px 12px;background:var(--accent-soft);border-radius:6px;min-height:42px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--muted);font-weight:500}
+td.m{font-family:var(--f-mono)}
+.rules{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.rules li{display:grid;grid-template-columns:22px 1fr;gap:8px;padding:7px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+.rules li .n{font-family:var(--f-mono);color:var(--muted)}
+.rules li.fire{border-color:var(--accent);background:var(--accent-soft)}
+.rules li.fire.crit{border-color:var(--crit)}
+.rules code{font-family:var(--f-mono);font-size:12px}
+.log{font-family:var(--f-mono);font-size:12px;display:grid;gap:4px;max-height:190px;overflow:auto}
+.log div{padding:4px 6px;background:var(--code);border-radius:4px}
+.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.metrics div{border:1px solid var(--line);border-radius:6px;padding:8px}
+.metrics small{color:var(--muted);display:block;font-size:12px}
+.metrics b{font-family:var(--f-mono);font-size:16px}
+.thr{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-size:13px;align-items:center}
+.thr input[type=number]{width:70px;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg)}
+/* animations */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes flash{50%{opacity:.25}}
+.blades{transform-origin:center;transform-box:fill-box}
+.fan-on .blades{animation:spin .5s linear infinite}
+.alarm-on .siren{animation:flash .45s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.fan-on .blades,.alarm-on .siren{animation:none}}
+footer{color:var(--muted);font-size:12px;text-align:center}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Smart Home Automation Using Model-Based Intelligent Agents</h1>
+      <div class="sub">CSA1739 – Artificial Intelligence · K Venkata Siva Prasad (192325106), B Reddy Balu (192312499) · Guide: Dr. Shri Vindhya A, SIMATS Engineering</div>
+    </div>
+    <div class="hbtns">
+      <button id="guided" class="primary">▶ Start guided demo</button>
+      <button id="auto" class="on" aria-pressed="true">Auto cycle: ON</button>
+      <button id="theme">Theme</button>
+    </div>
+  </header>
+
+  <div class="pipe" id="pipe" aria-label="Working principle">
+    <span class="stage">1 Simulated sensors</span><span class="arrow">→</span>
+    <span class="stage">2 Environment model</span><span class="arrow">→</span>
+    <span class="stage">3 Model-based agent</span><span class="arrow">→</span>
+    <span class="stage">4 Virtual actuators</span><span class="arrow">→</span>
+    <span class="stage">5 Dashboard</span><span class="arrow">→</span>
+    <span class="stage">6 State update</span>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: inputs -->
+    <div class="stack">
+      <section class="card">
+        <h2>Simulated sensors</h2>
+        <div class="ctl"><label for="temp">Temperature <output id="o-temp"></output></label><input id="temp" type="range" min="10" max="45" step="1" value="26"></div>
+        <div class="ctl"><label for="lux">Light intensity <output id="o-lux"></output></label><input id="lux" type="range" min="0" max="1000" step="10" value="600"></div>
+        <div class="ctl"><label for="smoke">Smoke level <output id="o-smoke"></output></label><input id="smoke" type="range" min="0" max="100" step="1" value="0"></div>
+        <div class="ctl"><label for="dur">Occupancy duration <output id="o-dur"></output></label><input id="dur" type="range" min="0" max="600" step="10" value="0"></div>
+        <div class="tog"><span id="motlbl">Motion detected</span><label class="sw"><input id="motion" type="checkbox" aria-labelledby="motlbl"><span></span></label></div>
+      </section>
+      <section class="card">
+        <h2>Try a scenario</h2>
+        <div class="presets" id="presets"></div>
+      </section>
+      <section class="card">
+        <h2>Rule thresholds</h2>
+        <div class="thr">
+          <label for="t-lux">Light ON if lux below</label><input id="t-lux" type="number" value="300">
+          <label for="t-temp">Fan ON if °C above</label><input id="t-temp" type="number" value="28">
+          <label for="t-smoke">Alarm if smoke above</label><input id="t-smoke" type="number" value="40">
+        </div>
+      </section>
+    </div>
+
+    <!-- CENTER: house -->
+    <div class="stack">
+      <section class="card">
+        <h2>Live home (virtual actuators)</h2>
+        <svg id="home" viewBox="0 0 520 330" role="img" aria-label="Room showing light, fan, alarm and occupant">
+          <defs>
+            <radialGradient id="gl"><stop offset="0" stop-color="var(--glow)" stop-opacity=".85"/><stop offset="1" stop-color="var(--glow)" stop-opacity="0"/></radialGradient>
+          </defs>
+          <rect x="10" y="10" width="500" height="310" rx="6" fill="var(--room)" stroke="var(--wall)" stroke-width="3"/>
+          <rect id="dark" x="13" y="13" width="494" height="304" rx="4" fill="#06101a" opacity="0"/>
+          <!-- window: outside brightness follows lux -->
+          <rect x="40" y="50" width="110" height="120" fill="#8fd0f0" id="win" stroke="var(--wall)" stroke-width="3"/>
+          <line x1="95" y1="50" x2="95" y2="170" stroke="var(--wall)" stroke-width="3"/><line x1="40" y1="110" x2="150" y2="110" stroke="var(--wall)" stroke-width="3"/>
+          <rect id="winshade" x="40" y="50" width="110" height="120" fill="#06101a" opacity="0"/>
+          <!-- floor -->
+          <line x1="13" y1="270" x2="507" y2="270" stroke="var(--wall)" stroke-width="2"/>
+          <!-- light -->
+          <g id="light">
+            <line x1="260" y1="13" x2="260" y2="60" stroke="var(--wall)" stroke-width="3"/>
+            <circle id="glow" cx="260" cy="82" r="110" fill="url(#gl)" opacity="0"/>
+            <path d="M245 62 h30 l8 30 a24 24 0 0 1 -46 0 z" id="bulb" fill="var(--panel)" stroke="var(--wall)" stroke-width="3"/>
+            <text x="260" y="125" text-anchor="middle" font-size="12" fill="var(--muted)">LIGHT</text>
+          </g>
+          <!-- fan -->
+          <g id="fan" transform="translate(400,95)">
+            <circle r="46" fill="none" stroke="var(--wall)" stroke-width="3"/>
+            <g class="blades">
+              <path d="M0 0 C 8 -34 30 -34 28 -12 C 20 -14 8 -10 0 0Z" fill="var(--wall)"/>
+              <path d="M0 0 C 34 8 34 30 12 28 C 14 20 10 8 0 0Z" fill="var(--wall)"/>
+              <path d="M0 0 C -8 34 -30 34 -28 12 C -20 14 -8 10 0 0Z" fill="var(--wall)"/>
+              <path d="M0 0 C -34 -8 -34 -30 -12 -28 C -14 -20 -10 -8 0 0Z" fill="var(--wall)"/>
+            </g>
+            <circle r="7" fill="var(--panel)" stroke="var(--wall)" stroke-width="2"/>
+            <text y="68" text-anchor="middle" font-size="12" fill="var(--muted)">FAN</text>
+          </g>
+          <!-- alarm -->
+          <g id="alarm" transform="translate(470,40)">
+            <rect x="-16" y="0" width="32" height="14" rx="3" fill="var(--wall)"/>
+            <path class="siren" d="M-12 0 a12 12 0 0 1 24 0z" id="siren" fill="var(--panel)" stroke="var(--wall)" stroke-width="2" transform="translate(0,0)"/>
+            <text x="0" y="30" text-anchor="middle" font-size="11" fill="var(--muted)">ALARM</text>
+          </g>
+          <!-- smoke puffs -->
+          <g id="smokefx" opacity="0" fill="var(--muted)"><circle cx="330" cy="240" r="16" opacity=".5"/><circle cx="352" cy="218" r="22" opacity=".4"/><circle cx="335" cy="190" r="26" opacity=".3"/></g>
+          <!-- person -->
+          <g id="person" opacity="0" transform="translate(230,200)">
+            <circle cx="0" cy="0" r="14" fill="var(--accent)"/>
+            <path d="M-18 70 v-40 a18 18 0 0 1 36 0 v40z" fill="var(--accent)"/>
+            <text y="88" text-anchor="middle" font-size="12" fill="var(--muted)">OCCUPANT</text>
+          </g>
+          <!-- thermometer -->
+          <g transform="translate(60,200)">
+            <rect x="-6" y="0" width="12" height="60" rx="6" fill="none" stroke="var(--wall)" stroke-width="2"/>
+            <rect id="mercury" x="-3" y="30" width="6" height="30" rx="3" fill="var(--crit)"/>
+            <circle cx="0" cy="64" r="9" fill="var(--crit)"/>
+            <text id="tlabel" x="18" y="40" font-size="13" fill="var(--fg)" font-family="var(--f-mono)"></text>
+          </g>
+        </svg>
+        <div class="status">
+          <div class="pill" id="p-light"><b>Light</b><span>OFF</span></div>
+          <div class="pill" id="p-fan"><b>Fan</b><span>OFF</span></div>
+          <div class="pill alarm" id="p-alarm"><b>Alarm</b><span>OFF</span></div>
+        </div>
+        <div class="caption" id="caption">Move a slider or pick a scenario. The agent re-evaluates every cycle.</div>
+      </section>
+      <section class="card">
+        <h2>Performance metrics</h2>
+        <div class="metrics">
+          <div><small>Decision time (last cycle)</small><b id="m-time">–</b></div>
+          <div><small>Cycles run</small><b id="m-cyc">0</b></div>
+          <div><small>Energy used (simulated)</small><b id="m-en">0.00 Wh</b></div>
+          <div><small>Saved vs. all appliances always ON</small><b id="m-save">–</b></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- RIGHT: agent -->
+    <div class="stack col-r">
+      <section class="card">
+        <h2>Internal model (agent memory)</h2>
+        <table>
+          <tr><th></th><th>Previous</th><th>Current</th></tr>
+          <tr><td>Temperature</td><td class="m" id="pv-temp"></td><td class="m" id="cv-temp"></td></tr>
+          <tr><td>Light</td><td class="m" id="pv-lux"></td><td class="m" id="cv-lux"></td></tr>
+          <tr><td>Smoke</td><td class="m" id="pv-smoke"></td><td class="m" id="cv-smoke"></td></tr>
+          <tr><td>Room occupied</td><td class="m" id="pv-occ"></td><td class="m" id="cv-occ"></td></tr>
+          <tr><td>Light / Fan / Alarm</td><td class="m" id="pv-act"></td><td class="m" id="cv-act"></td></tr>
+        </table>
+        <div class="sub" id="memnote" style="margin-top:8px"></div>
+      </section>
+      <section class="card">
+        <h2>Decision tree (rules in priority order)</h2>
+        <ul class="rules" id="rules"></ul>
+      </section>
+      <section class="card">
+        <h2>Agent decision log</h2>
+        <div class="log" id="log"></div>
+      </section>
+    </div>
+  </div>
+  <footer>All sensors and appliances are simulated in the browser. The agent logic matches the report: percept → update internal model → IF–THEN rules → actuators → feedback.</footer>
+</div>
+
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var inp={temp:$('temp'),lux:$('lux'),smoke:$('smoke'),dur:$('dur'),motion:$('motion')};
+  var fmt={temp:function(v){return v+' °C'},lux:function(v){return v+' lux'},smoke:function(v){return v+' units'},dur:function(v){return v+' s'}};
+  var GRACE=3; // cycles the model keeps a room "occupied" after the last motion
+  var model={prev:null,cur:null,sinceMotion:99,act:{light:false,fan:false,alarm:false},cycles:0,energy:0,baseline:0,lastKey:''};
+  var WATT={light:10,fan:40,alarm:5};
+  var auto=true,timer=null,guidedTimer=null;
+
+  var RULES=[
+    {id:'R1',txt:'IF smoke > <code data-t="smoke"></code> THEN Alarm ON (safety overrides comfort rules)',crit:true},
+    {id:'R2',txt:'IF room not occupied THEN Light OFF and Fan OFF (save energy)'},
+    {id:'R3',txt:'IF occupied AND light < <code data-t="lux"></code> lux THEN Light ON'},
+    {id:'R4',txt:'IF occupied AND temperature > <code data-t="temp"></code> °C THEN Fan ON'}
+  ];
+  var rulesEl=$('rules');
+  RULES.forEach(function(r,i){var li=document.createElement('li');li.id=r.id;li.innerHTML='<span class="n">'+r.id+'</span><span>'+r.txt+'</span>';rulesEl.appendChild(li)});
+  function thr(){return {lux:+$('t-lux').value,temp:+$('t-temp').value,smoke:+$('t-smoke').value}}
+  function paintThr(){var t=thr();document.querySelectorAll('code[data-t]').forEach(function(c){c.textContent=t[c.getAttribute('data-t')]})}
+
+  function readInputs(){return {temp:+inp.temp.value,lux:+inp.lux.value,smoke:+inp.smoke.value,dur:+inp.dur.value,motion:inp.motion.checked}}
+  function onoff(b){return b?'ON':'OFF'}
+
+  function flashPipe(){return; /* animation off: stages stay static */
+    var st=document.querySelectorAll('.stage');
+    st.forEach(function(s){s.classList.remove('act')});
+    st.forEach(function(s,i){setTimeout(function(){st.forEach(function(x){x.classList.remove('act')});s.classList.add('act');if(i===st.length-1)setTimeout(function(){s.classList.remove('act')},250)},i*110)});
+  }
+
+  function step(tick){
+    var t0=performance.now();
+    var p=readInputs(), T=thr();
+    // 2. environment model update
+    model.prev=model.cur;
+    model.sinceMotion = p.motion ? 0 : Math.min(model.sinceMotion+(tick?1:0),99);
+    var occupied = p.motion || p.dur>0 || model.sinceMotion<GRACE;
+    model.cur={temp:p.temp,lux:p.lux,smoke:p.smoke,occ:occupied,act:{light:model.act.light,fan:model.act.fan,alarm:model.act.alarm}};
+    if(!model.prev) model.prev=JSON.parse(JSON.stringify(model.cur));
+    // 3. rule evaluation (decision tree)
+    var fired={}, why=[], a={light:false,fan:false,alarm:false};
+    if(p.smoke>T.smoke){a.alarm=true;fired.R1=1;why.push('smoke '+p.smoke+' is above '+T.smoke+' so the alarm is switched ON')}
+    if(!occupied){fired.R2=1;why.push('no one is in the room so light and fan are OFF')}
+    else{
+      if(p.lux<T.lux){a.light=true;fired.R3=1;why.push('room is occupied and light is only '+p.lux+' lux so the light is ON')}
+      if(p.temp>T.temp){a.fan=true;fired.R4=1;why.push('room is occupied and it is '+p.temp+' °C so the fan is ON')}
+      if(!a.light&&!a.fan&&!a.alarm)why.push('occupied, but light and temperature are comfortable so nothing is needed')
+    }
+    // 4. actuators
+    var changed=[];
+    ['light','fan','alarm'].forEach(function(k){if(model.act[k]!==a[k])changed.push((k[0].toUpperCase()+k.slice(1))+' '+onoff(model.act[k])+'→'+onoff(a[k]))});
+    model.act=a; model.cur.act=JSON.parse(JSON.stringify(a));
+    var dt=performance.now()-t0;
+    if(tick){model.cycles++; var w=(a.light?WATT.light:0)+(a.fan?WATT.fan:0)+(a.alarm?WATT.alarm:0); model.energy+=w/3600; model.baseline+=(WATT.light+WATT.fan+WATT.alarm)/3600}
+    // 5. dashboard
+    render(p,occupied,fired,why,changed,dt,tick);
+    // 6. state update: current state becomes previous for the next cycle
+    model.prevNext=JSON.parse(JSON.stringify(model.cur));
+    if(tick||changed.length) model.prev=model.prevNext;
+    flashPipe();
+  }
+
+  function render(p,occ,fired,why,changed,dt,tick){
+    for(var k in fmt){$('o-'+k).textContent=fmt[k](inp[k].value)}
+    // house
+    var lightOn=model.act.light,fanOn=model.act.fan,alOn=model.act.alarm;
+    $('glow').setAttribute('opacity',lightOn?1:0);
+    $('bulb').setAttribute('fill',lightOn?'var(--glow)':'var(--panel)');
+    $('fan').classList.toggle('fan-on',fanOn);
+    $('alarm').classList.toggle('alarm-on',alOn);
+    $('siren').setAttribute('fill',alOn?'var(--crit)':'var(--panel)');
+    $('person').setAttribute('opacity',occ?1:0);
+    $('smokefx').setAttribute('opacity',Math.min(1,p.smoke/60));
+    var darkness=1-p.lux/1000;
+    $('winshade').setAttribute('opacity',(darkness*0.85).toFixed(2));
+    $('dark').setAttribute('opacity',(lightOn?darkness*0.25:darkness*0.55).toFixed(2));
+    var h=Math.max(4,Math.round((p.temp-10)/35*56));
+    $('mercury').setAttribute('y',60-h);$('mercury').setAttribute('height',h);
+    $('tlabel').textContent=p.temp+' °C';
+    [['light',lightOn],['fan',fanOn],['alarm',alOn]].forEach(function(x){var el=$('p-'+x[0]);el.classList.toggle('on',x[1]);el.querySelector('span').textContent=onoff(x[1])});
+    // model table
+    var pv=model.prev,cv=model.cur;
+    $('pv-temp').textContent=pv.temp+' °C';$('cv-temp').textContent=cv.temp+' °C';
+    $('pv-lux').textContent=pv.lux+' lux';$('cv-lux').textContent=cv.lux+' lux';
+    $('pv-smoke').textContent=pv.smoke;$('cv-smoke').textContent=cv.smoke;
+    $('pv-occ').textContent=pv.occ?'Yes':'No';$('cv-occ').textContent=cv.occ?'Yes':'No';
+    function acts(a){return onoff(a.light)+' / '+onoff(a.fan)+' / '+onoff(a.alarm)}
+    $('pv-act').textContent=acts(pv.act);$('cv-act').textContent=acts(cv.act);
+    $('memnote').textContent = (!p.motion&&p.dur===0&&occ) ? 'Memory at work: no motion now, but motion was seen '+model.sinceMotion+' cycle(s) ago, so the model still treats the room as occupied (grace period '+GRACE+' cycles).' : 'The model keeps the last motion time so a person sitting still is not treated as absent.';
+    // rules
+    RULES.forEach(function(r){var li=$(r.id);li.classList.toggle('fire',!!fired[r.id]);li.classList.toggle('crit',!!fired[r.id]&&!!r.crit)});
+    // caption
+    $('caption').textContent='Agent: '+why.join('; ')+'.';
+    // log
+    var key=why.join('|')+changed.join(',');
+    if(changed.length||key!==model.lastKey){
+      var d=document.createElement('div');
+      d.textContent='#'+model.cycles+'  '+(changed.length?changed.join(', ')+'  ← ':'no change  ← ')+why[0];
+      var L=$('log');L.insertBefore(d,L.firstChild);while(L.children.length>40)L.removeChild(L.lastChild);
+      model.lastKey=key;
+    }
+    // metrics
+    $('m-time').textContent=dt.toFixed(2)+' ms';
+    $('m-cyc').textContent=model.cycles;
+    $('m-en').textContent=model.energy.toFixed(3)+' Wh';
+    $('m-save').textContent=model.baseline>0?Math.max(0,(1-model.energy/model.baseline)*100).toFixed(0)+' %':'–';
+  }
+
+  // scenarios
+  var SCEN=[
+    {n:'A person enters a dark room',v:{temp:25,lux:80,smoke:0,dur:20,motion:true},c:'Motion + low light → the agent switches the light ON.'},
+    {n:'Hot, occupied room',v:{temp:34,lux:700,smoke:0,dur:120,motion:true},c:'Occupied and above 28 °C → the fan is switched ON.'},
+    {n:'Smoke detected',v:{temp:30,lux:200,smoke:75,dur:0,motion:false},c:'Smoke above threshold → the alarm rule fires first and overrides comfort rules.'},
+    {n:'Everyone leaves',leave:true,v:{temp:34,lux:80,smoke:0,dur:0,motion:false},c:'Dark and hot, but nobody is home → light and fan stay OFF to save energy (after the grace period).'},
+    {n:'Bright, comfortable day',v:{temp:24,lux:850,smoke:0,dur:300,motion:true},c:'Occupied but comfortable → no appliance is needed.'}
+  ];
+  function apply(v,leave){inp.temp.value=v.temp;inp.lux.value=v.lux;inp.smoke.value=v.smoke;inp.dur.value=v.dur;inp.motion.checked=v.motion;if(v.motion)model.sinceMotion=0;else model.sinceMotion=leave?0:99;step(false)}
+  var pr=$('presets');
+  SCEN.forEach(function(s){var b=document.createElement('button');b.textContent=s.n;b.onclick=function(){stopGuided();apply(s.v,s.leave);$('caption').textContent=s.c+'  '+$('caption').textContent};pr.appendChild(b)});
+
+  // guided demo
+  function stopGuided(){if(guidedTimer){clearTimeout(guidedTimer);guidedTimer=null;$('guided').textContent='▶ Start guided demo'}}
+  $('guided').onclick=function(){
+    if(guidedTimer){stopGuided();return}
+    setAuto(true);var i=0;
+    (function next(){
+      if(i>=SCEN.length){stopGuided();return}
+      var s=SCEN[i++];apply(s.v,s.leave);$('caption').textContent=(i)+'/'+SCEN.length+' · '+s.n+'. '+s.c+'  '+$('caption').textContent;
+      $('guided').textContent='■ Stop guided demo ('+i+'/'+SCEN.length+')';
+      guidedTimer=setTimeout(next,i===4?9000:6000);
+    })();
+  };
+
+  // auto cycle
+  function setAuto(on){auto=on;$('auto').textContent='Auto cycle: '+(on?'ON':'OFF');$('auto').classList.toggle('on',on);$('auto').setAttribute('aria-pressed',on);if(timer)clearInterval(timer);if(on)timer=setInterval(function(){step(true)},1000)}
+  $('auto').onclick=function(){setAuto(!auto)};
+  Object.keys(inp).forEach(function(k){inp[k].addEventListener('input',function(){if(k==='motion'&&inp.motion.checked)model.sinceMotion=0;if(guidedTimer&&false)stopGuided();step(false)})});
+  ['t-lux','t-temp','t-smoke'].forEach(function(i){$(i).addEventListener('input',function(){paintThr();step(false)})});
+
+  // theme
+  $('theme').onclick=function(){var r=document.documentElement;var dark=r.getAttribute('data-theme')?r.getAttribute('data-theme')==='dark':matchMedia('(prefers-color-scheme: dark)').matches;r.setAttribute('data-theme',dark?'light':'dark')};
+
+  paintThr();
+  apply({temp:26,lux:600,smoke:0,dur:0,motion:false});
+  setAuto(true);
+})();
+</script>
+
+</body></html>
